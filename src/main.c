@@ -139,7 +139,7 @@ static int in6listen(unsigned short port)
 	return(fd);
 }
 
-static int cansock(void)
+static int cansock(char *interface)
 {
 	struct sockaddr_can addr;
 	struct ifreq ifr;
@@ -160,7 +160,7 @@ static int cansock(void)
 
 	memset(&addr, 0, sizeof(addr));
         
-        strcpy(ifr.ifr_name, "can0" );
+        strcpy(ifr.ifr_name, interface );
         ioctl(fd, SIOCGIFINDEX, &ifr);
         addr.can_family = AF_CAN;
         addr.can_ifindex = ifr.ifr_ifindex;
@@ -180,7 +180,7 @@ static int cansock(void)
 	
 	do {
 		if((res = ioctl(fd, SIOCGIFNAME, &ifr)) >= 0) {
-			if(strstr(ifr.ifr_name, "can0") != NULL) {
+			if(strstr(ifr.ifr_name, interface) != NULL) {
 				struct can_iface *iface;
 
 				if((iface = malloc(sizeof(*iface)))) {
@@ -273,6 +273,7 @@ int main(int argc, char *argv[])
 {
 	struct epoll_event ev[CONFIG_EPOLL_INITSIZE];
 	char *hostname;
+        char *interface;
 	int port;
 	int epfd;
 	int netfd;
@@ -286,7 +287,7 @@ int main(int argc, char *argv[])
 	hostname = NULL;
 	ret_val = 1;
 	run = 1;
-	
+	interface = "can0";
 	for(ret_val = 1; ret_val < argc; ret_val++) {
 		if(strcmp(argv[ret_val], "--dont-fork") == 0 || strcmp(argv[ret_val], "-d") == 0) {
 			flags &= ~FLAG_DAEMON;
@@ -319,10 +320,16 @@ int main(int argc, char *argv[])
 				   "  -d, --dont-fork   don't fork to the background\n"
 				   "  -c, --connect     connect to the host specified by the next argument\n"
 				   "  -p, --port        use the port specified by the next argument\n"
+                                   "  -i, --interface   specify the can interface (can0, can1, ect.)  \n"
+                                   "   If you do not specify an interface, it will bind to can0 by default\n"
 				   "  -h, --help        display this help and exit\n",
 				   argv[0], CONFIG_MY_NAME, CONFIG_INET_PORT);
 			return(1);
-		}
+		} else if(strcmp(argv[ret_val], "--interface") == 0 || strcmp(argv[ret_val], "-i") == 0) {
+			if(++ret_val < argc) {
+                            interface = argv[ret_val];
+			}
+                }
 	}
 
 	if(!(conns = array_alloc())) {
@@ -348,7 +355,7 @@ int main(int argc, char *argv[])
 	}
 	sigsetup();
 
-	if((canfd = cansock()) < 0) {
+	if((canfd = cansock(interface)) < 0) {
 		fprintf(stderr, "Failed to initialize CAN socket\n");
 		return(1);
 	}
