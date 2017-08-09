@@ -159,7 +159,12 @@ static int cansock(void)
 	}
 
 	memset(&addr, 0, sizeof(addr));
-
+        
+        strcpy(ifr.ifr_name, "can0" );
+        ioctl(fd, SIOCGIFINDEX, &ifr);
+        addr.can_family = AF_CAN;
+        addr.can_ifindex = ifr.ifr_ifindex;
+        
 	if(bind(fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
 		e = errno;
 		perror("bind");
@@ -175,7 +180,7 @@ static int cansock(void)
 	
 	do {
 		if((res = ioctl(fd, SIOCGIFNAME, &ifr)) >= 0) {
-			if(strstr(ifr.ifr_name, "can") != NULL) {
+			if(strstr(ifr.ifr_name, "can0") != NULL) {
 				struct can_iface *iface;
 
 				if((iface = malloc(sizeof(*iface)))) {
