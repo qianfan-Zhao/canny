@@ -9,6 +9,12 @@ the IP-network, and messages are blindly forwarded without sanitizing their
 contents. It should go without saying that this is not meant to be used in an
 actual car or industrial control network.
 
+## Fork
+This is forked from the https://github.com/cphamlet/canny
+Originally this code is from the https://github.com/m10k/canny
+
+This fork has a small change to only open one socketcan interface, defaulting to
+can0 if not spefified one with -i e.g. "-i vcan0"
 
 ## Usage
 
@@ -41,13 +47,13 @@ like the following example.
 Start a canny server on machine A (let's assume its IP is 10.0.0.1):
 
 ```
-$ canny -p 1234
+$ canny -p 1234 -i can0
 ```
 
 Then, start canny as a client on machine B:
 
 ```
-$ canny -c 10.0.0.1 -p 1234
+$ canny -c 10.0.0.1 -p 1234 -i vcan0
 ```
 
 Now, messages received on any CAN interfaces on machine A will be forwarded to all
