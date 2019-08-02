@@ -159,12 +159,12 @@ static int cansock(char *interface)
 	}
 
 	memset(&addr, 0, sizeof(addr));
-    memset(&ifr, 0, sizeof(ifr));
+	memset(&ifr, 0, sizeof(ifr));
 
-    strcpy(ifr.ifr_name, interface);
-    ioctl(fd, SIOCGIFINDEX, &ifr);
-    addr.can_family = AF_CAN;
-    addr.can_ifindex = ifr.ifr_ifindex;
+	strcpy(ifr.ifr_name, interface);
+	ioctl(fd, SIOCGIFINDEX, &ifr);
+	addr.can_family = AF_CAN;
+	addr.can_ifindex = ifr.ifr_ifindex;
 
 	if(bind(fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
 		e = errno;
@@ -190,7 +190,7 @@ static int cansock(char *interface)
 				}
 			}
 		}
-    }
+	}
 
 	return(fd);
 }
@@ -266,7 +266,7 @@ int main(int argc, char *argv[])
 {
 	struct epoll_event ev[CONFIG_EPOLL_INITSIZE];
 	char *hostname;
-        char *interface;
+	char *interface;
 	int port;
 	int epfd;
 	int netfd;
@@ -313,16 +313,16 @@ int main(int argc, char *argv[])
 				   "  -d, --dont-fork   don't fork to the background\n"
 				   "  -c, --connect     connect to the host specified by the next argument\n"
 				   "  -p, --port        use the port specified by the next argument\n"
-                   "  -i, --interface   specify the can interface (can0, can1, ect.)  \n"
-                   "   If you do not specify an interface, it will bind to can0 by default\n"
+				   "  -i, --interface   specify the can interface (can0, can1, ect.)  \n"
+				   "   If you do not specify an interface, it will bind to can0 by default\n"
 				   "  -h, --help        display this help and exit\n",
 				   argv[0], CONFIG_MY_NAME, CONFIG_INET_PORT);
 			return(1);
 		} else if(strcmp(argv[ret_val], "--interface") == 0 || strcmp(argv[ret_val], "-i") == 0) {
 			if(++ret_val < argc) {
-                            interface = argv[ret_val];
+				interface = argv[ret_val];
 			}
-                }
+		}
 	}
 
 	if(!(conns = array_alloc())) {
