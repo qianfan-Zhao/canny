@@ -41,7 +41,11 @@
 
 struct conn {
 	int fd;
-	struct sockaddr_in6 addr;
+	union {
+		struct sockaddr_in6 addr6;
+		struct sockaddr_in addr4;
+	} addr;
+	socklen_t addrlen;
 
 	union {
 		struct can_frame frame[CONFIG_BUFFER_FRAMES];
@@ -59,12 +63,13 @@ static array_t *conns;
 static array_t *ifaces;
 static int run;
 
-static int in6connect(const char *host, unsigned short port)
+static int inconnect(int ipv6, const char *host, unsigned short port)
 {
 	struct addrinfo hints, *res, *p;
 	char portstr[6];
 	int ret_val, err;
 
+	ipv6 = ipv6; /* unused */
 	ret_val = -EHOSTUNREACH;
 	memset(&hints, 0, sizeof(hints));
 	hints.ai_family = AF_UNSPEC;
@@ -100,29 +105,42 @@ static int in6connect(const char *host, unsigned short port)
 	return(ret_val);
 }
 
-static int in6listen(unsigned short port)
+static int inlisten(int ipv6, unsigned short port)
 {
-	struct sockaddr_in6 addr;
+	struct sockaddr_in6 addr6;
+	struct sockaddr_in addr4;
+	struct sockaddr *addr;
+	socklen_t addrlen;
 	int err;
 	int fd;
 
-	if((fd = socket(PF_INET6, SOCK_STREAM, 0)) < 0) {
+	addr = ipv6 ? (struct sockaddr *)&addr6 : (struct sockaddr *)&addr4;
+	addrlen = ipv6 ? sizeof(addr6) : sizeof(addr4);
+
+	if((fd = socket(ipv6 ? PF_INET6 : PF_INET, SOCK_STREAM, 0)) < 0) {
 		err = errno;
 		perror("socket");
 		return(-err);
 	}
 
-	memset(&addr, 0, sizeof(addr));
-	addr.sin6_family = AF_INET6;
-	addr.sin6_port = htons(port);
-	addr.sin6_addr = in6addr_any;
+	if (ipv6) {
+		memset(&addr6, 0, sizeof(addr6));
+		addr6.sin6_family = AF_INET6;
+		addr6.sin6_port = htons(port);
+		addr6.sin6_addr = in6addr_any;
+	} else {
+		memset(&addr4, 0, sizeof(addr4));
+		addr4.sin_family = AF_INET;
+		addr4.sin_port = htons(port);
+		addr4.sin_addr.s_addr = htonl(INADDR_ANY);
+	}
 	err = 1;
 
 	if(setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &err, sizeof(err)) < 0) {
 		perror("setsockopt");
 	}
 
-	if(bind(fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+	if(bind(fd, addr, addrlen) < 0) {
 		err = errno;
 		perror("bind");
 		close(fd);
@@ -271,6 +289,7 @@ int main(int argc, char *argv[])
 	int epfd;
 	int netfd;
 	int canfd;
+	int ipv6;
 	int ret_val;
 	int flags;
 	int err;
@@ -278,13 +297,16 @@ int main(int argc, char *argv[])
 	port = CONFIG_INET_PORT;
 	flags = FLAG_DAEMON | FLAG_LISTEN;
 	hostname = NULL;
+	ipv6 = 0; /* default IPv4 */
 	ret_val = 1;
 	run = 1;
 	interface = "can0";
 	for(ret_val = 1; ret_val < argc; ret_val++) {
 		if(strcmp(argv[ret_val], "--dont-fork") == 0 || strcmp(argv[ret_val], "-d") == 0) {
 			flags &= ~FLAG_DAEMON;
-		} else if(strcmp(argv[ret_val], "--connect") == 0 || strcmp(argv[ret_val], "-c") == 0) {
+		}else if(strcmp(argv[ret_val], "-4") == 0 || strcmp(argv[ret_val], "-6") == 0) {
+			ipv6 = strcmp(argv[ret_val], "-6") == 0;
+		}else if(strcmp(argv[ret_val], "--connect") == 0 || strcmp(argv[ret_val], "-c") == 0) {
 			if(++ret_val < argc) {
 				flags &= ~FLAG_LISTEN;
 				hostname = argv[ret_val];
@@ -311,6 +333,7 @@ int main(int argc, char *argv[])
 				   "\n"
 				   "The following options are recognized:\n"
 				   "  -d, --dont-fork   don't fork to the background\n"
+				   "  -4/-6             select IPv4 or IPv6\n"
 				   "  -c, --connect     connect to the host specified by the next argument\n"
 				   "  -p, --port        use the port specified by the next argument\n"
 				   "  -i, --interface   specify the can interface (can0, can1, ect.)  \n"
@@ -370,7 +393,7 @@ int main(int argc, char *argv[])
 	}
 
 	if(flags & FLAG_LISTEN) {
-		if((netfd = in6listen(port & 0xffff)) >= 0) {
+		if((netfd = inlisten(ipv6, port & 0xffff)) >= 0) {
 			ev[0].data.ptr = &netfd;
 			ev[0].events = EPOLLIN;
 
@@ -394,12 +417,11 @@ int main(int argc, char *argv[])
 
 							struct epoll_event nev;
 							struct conn *new_con;
-							socklen_t addrlen;
 
 							if(!(new_con = malloc(sizeof(*new_con)))) {
 								perror("malloc");
 							} else {
-								new_con->fd = accept(con->fd, (struct sockaddr*)&(new_con->addr), &addrlen);
+								new_con->fd = accept(con->fd, (struct sockaddr*)&(new_con->addr), &new_con->addrlen);
 
 								if(new_con->fd < 0) {
 									free(new_con);
@@ -485,7 +507,7 @@ int main(int argc, char *argv[])
 			close(netfd);
 		}
 	} else { /* if(flags & FLAG_LISTEN) */
-		if((netfd = in6connect(hostname, port & 0xffff)) < 0) {
+		if((netfd = inconnect(ipv6, hostname, port & 0xffff)) < 0) {
 			fprintf(stderr, "Unable to connect to %s:%d\n", hostname, port & 0xffff);
 		} else {
 			ev[0].data.ptr = &netfd;
